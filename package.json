@@ -1,0 +1,19 @@
+{
+  "name": "@amzn/node-js-webpack-variants",
+  "version": "0.1.0",
+  "description": "",
+  "author": "",
+  "license": "UNLICENSED",
+  "repository": "ssh://git.amazon.com/pkg/NodeJS-webpack-variants",
+  "homepage": "https://code.amazon.com/packages/NodeJS-webpack-variants",
+  "scripts": {
+    "test": "echo 'running tests'",
+    "build": "echo 'building the packages'",
+    "prepublishOnly": "npm run build && npm run test"
+  },
+  "files": [],
+  "npm-pretty-much": {
+    "runTest": "never",
+    "ciBuild": "always"
+  }
+}

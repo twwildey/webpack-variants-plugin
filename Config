@@ -1,0 +1,18 @@
+package.NodeJS-webpack-variants = {
+    interfaces = (1.0);
+
+    build-system = npm-pretty-much;
+    build-tools = {
+        1.0 = {
+            NpmPrettyMuch = 1.0;
+            NodeJS = default;
+        };
+    };
+
+    # Add first-party npm dependencies here and add them with a wildcard
+    # version in package.json
+    test-dependencies = {
+        1.0 = {
+        };
+    };
+};
