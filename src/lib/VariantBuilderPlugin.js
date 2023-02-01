@@ -3,7 +3,6 @@ import path from 'path';
 import webpack from 'webpack';
 
 import {
-    VARIANTS_URI_DELIMITER,
     DEFAULT_VARIANT_PRIORITY,
     DEFAULT_VARIANT_CLOSURE_FILE_NAME
 } from './constants.js';
@@ -16,8 +15,10 @@ import {
 } from './utils.js';
 
 import {
+    buildVariantRegexForFilename,
     buildVariantSet,
-    buildVaraintsPriority
+    buildVaraintsPriority,
+    reduceVariantSetByPriority
 } from './MatchSet.js';
 
 import ModuleVariantClosure from './ModuleVariantClosure.js';
@@ -48,6 +49,11 @@ export default class VariantBuilderPlugin {
         }
 
         this.options = options;
+        this.variantsPriority = buildVaraintsPriority(options.priority);
+    }
+
+    shouldIncludeVariant(variantSet, variantsPriority) {
+        return isEmptyObj(reduceVariantSetByPriority(variantSet, variantsPriority));
     }
 
     resolverResultJSHookFactory(compiler) {
@@ -56,7 +62,8 @@ export default class VariantBuilderPlugin {
             encountered,
             collected,
             missing,
-            varied
+            varied,
+            variantsPriority
         } = this;
 
         return (request) => {
@@ -80,12 +87,7 @@ export default class VariantBuilderPlugin {
                 const files = fileSystem.readdirSync(dirName);
                 var filesLen = files.length - 1;
                 if (filesLen >= 0) {
-                    const extension = path.extname(fullPath);
-                    const fileName = path.basename(fullPath, extension);
-                    const fileNameLen = fileName.length;
-
-                    const variantRegexStr = "^" + fileName + "(\\.[\\w\\=\\:]+)+" + (extension ? ("\\" + extension) : "\\.[a-zA-Z0-9]+") + "$";
-                    const variantRegex = new RegExp(variantRegexStr, 'g');
+                    const { extension, fileName, fileNameLen, variantRegex } = buildVariantRegexForFilename(fullPath);
 
                     let firstIdx = firstIndexOfPrefix(files, fileName, 0, filesLen);
                     if (firstIdx < 0) {
@@ -111,9 +113,11 @@ export default class VariantBuilderPlugin {
                                     children: []
                                 };
 
-                                missing[variantFullPath] = variantFullPath;
-                                collected[variantFullPath] = collectedVariant;
-                                variants.push(collectedVariant);
+                                if (this.shouldIncludeVariant(variantSet, variantsPriority)) {
+                                    missing[variantFullPath] = variantFullPath;
+                                    collected[variantFullPath] = collectedVariant;
+                                    variants.push(collectedVariant);
+                                }
                             }
                         }
                     }
@@ -167,6 +171,35 @@ export default class VariantBuilderPlugin {
         };
     }
 
+    resolveChunks(chunkNames, chunkIdHints) {
+        if (Array.isArray(chunkNames) && (chunkNames.length > 0)) {
+            return chunkNames;
+        }
+
+        return chunkIdHints;
+    }
+
+    addAssetsToChunkTable(chunkTable, chunkNames, chunks, entry) {
+        chunkNames.forEach((chunkName, idx) => {
+            const entryImports = entry[chunkName];
+            if (entryImports) {
+                const chunkId = chunks[idx];
+                iterateEntryImports(entryImports, function(entryImportPath) {
+                    chunkTable[chunkId].assets.push(entryImportPath);
+                });
+            }
+        });
+    }
+
+    recurseChunks(chunkTable, chunkId, callback) {
+        const chunk = chunkTable[chunkId];
+        chunk.assets.forEach(callback);
+
+        chunk.info.parents.forEach((parentChunkId) => {
+            this.recurseChunks(chunkTable, parentChunkId, callback);
+        });
+    }
+
     compilationDoneHookFactory(compiler) {
         const {
             roots,
@@ -202,7 +235,10 @@ export default class VariantBuilderPlugin {
                 // TODO - refactor this code so chunks with the same name don't collide
                 const chunkTable = {};
                 chunks.forEach(function(chunk) {
-                    chunkTable[chunk.id] = [];
+                    chunkTable[chunk.id] = {
+                        info: chunk,
+                        assets: []
+                    };
                 });
 
                 if (this.firstRun) {
@@ -217,26 +253,35 @@ export default class VariantBuilderPlugin {
                     delete this.firstRun;
                 }
 
-                assets.forEach(function(asset) {
-                    const assetKey = stripExtension(asset.name);
-                    const entryImports = entry[assetKey];
-                    if (entryImports && asset.size > 0) {
-                        asset.chunks.forEach(function(chunkId) {
-                            iterateEntryImports(entryImports, function(entryImportPath) {
-                                chunkTable[chunkId].push(entryImportPath);
-                            });
-                        });
+                assets.forEach((asset) => {
+                    if (asset.size <= 0) {
+                        return;
                     }
+
+                    const chunkNames = this.resolveChunks(asset.chunkNames, asset.chunkIdHints);
+                    this.addAssetsToChunkTable(chunkTable, chunkNames, asset.chunks, entry);
+
+                    const auxiliaryChunkNames = this.resolveChunks(asset.auxiliaryChunkNames, asset.auxiliaryChunkIdHints);
+                    this.addAssetsToChunkTable(chunkTable, auxiliaryChunkNames, asset.auxiliaryChunks, entry);
                 });
 
-                modules.forEach(function(module) {
-                    const moduleId = module.identifier;
-                    const fullPath = module.fullPath = moduleId.substr(moduleId.lastIndexOf('|') + 1);
+                // For locating associated chunks when they are not directly available - needed for dynamic imports
+                const moduleIdMap = {};
+
+                modules.forEach((module) => {
+                    const fullPath = module.nameForCondition;
+
+                    // Non-modules do not have a valid nameForCondition
+                    if (!fullPath) {
+                        return;
+                    }
+
+                    moduleIdMap[module.id] = module;
 
                     const variedModule = varied[fullPath];
                     if (variedModule) {
-                        module.chunks.forEach(function(chunkId) {
-                            chunkTable[chunkId].forEach(function(rootModulePath) {
+                        module.chunks.forEach((chunkId) => {
+                            this.recurseChunks(chunkTable, chunkId, function(rootModulePath) {
                                 const rootModuleFullPath = fileSystem.realpathSync(rootModulePath);
                                 collected[rootModuleFullPath].children.push(variedModule);
                             });
@@ -256,41 +301,46 @@ export default class VariantBuilderPlugin {
     // Copied from `createCompiler` in `webpack-cli/lib/webpack-cli.js`
     runWebpack(options) {
         try {
-          webpack(options, (error, stats) => {
-            if (error) {
-              if (this.isValidationError(error)) {
-                console.error(error.message);
-              } else {
-                console.error(error);
-              }
+            webpack(options, (error, stats) => {
+                if (error) {
+                    if (this.isValidationError(error)) {
+                        console.error(error.message);
+                    } else {
+                        console.error(error);
+                    }
 
-              process.exit(2);
-            }
+                    process.exit(2);
+                }
 
-            if (stats.hasErrors()) {
-              process.exit(1);
-            }
+                if (stats.hasErrors()) {
+                    console.error(stats.toString({
+                        errors: true,
+                        errorDetails: true,
+                    }));
 
-            console.log(stats.toString(options.stats));
-          });
+                    process.exit(1);
+                }
+
+                console.log(stats.toString(options.stats));
+            });
         } catch (error) {
-          if (this.isValidationError(error)) {
-            console.error(error.message);
-          } else {
-            console.error(error);
-          }
+            if (this.isValidationError(error)) {
+                console.error(error.message);
+            } else {
+                console.error(error);
+            }
 
-          process.exit(2);
+            process.exit(2);
         }
     }
 
     // Copied from `isValidationError` in `webpack-cli/lib/webpack-cli.js`
     isValidationError(error) {
-      // https://github.com/webpack/webpack/blob/master/lib/index.js#L267
-      // https://github.com/webpack/webpack/blob/v4.44.2/lib/webpack.js#L90
-      const ValidationError = webpack.ValidationError || webpack.WebpackOptionsValidationError;
+        // https://github.com/webpack/webpack/blob/master/lib/index.js#L267
+        // https://github.com/webpack/webpack/blob/v4.44.2/lib/webpack.js#L90
+        const ValidationError = webpack.ValidationError || webpack.WebpackOptionsValidationError;
 
-      return (error instanceof ValidationError) || error.name === "ValidationError";
+        return (error instanceof ValidationError) || error.name === "ValidationError";
     }
 
     buildModuleVariantClosure(moduleNode, parentVariantClosure) {
@@ -340,13 +390,14 @@ export default class VariantBuilderPlugin {
             manifestPath = path.join(output.path, manifestPath);
         }
 
+        console.error(`\nWriting variant manifest to ${manifestPath}.\n`);
+
         fs.writeFileSync(manifestPath, JSON.stringify(variantsMap, null, 4));
     }
 
     finalizeVariants(compiler) {
         try {
-            const variantsPriority = buildVaraintsPriority(this.options.priority);
-            const { collected, roots } = this;
+            const { collected, roots, variantsPriority } = this;
 
             const entryVariants = {};
             for (var rootModuleFullPath in roots) {
@@ -383,12 +434,16 @@ export default class VariantBuilderPlugin {
             if (!isEmptyObj(this.missing)) {
                 process.nextTick(() => {
                     const { context } = compiler.options;
-                    console.error('Variants found and are being evaluated in an additional compilation:');
+
+                    console.error('\nThe following variants were found and will be evaluated in an additional compilation to identify transitive variants:');
 
                     const missing = this.removePrefixFromWebpackEntry(this.missing, context);
-                    Object.keys(missing).forEach(function(pathToBeCompiled) {
-                        console.error(`\t${pathToBeCompiled}`);
+                    Object.keys(missing).forEach(function(variantPathForEvaluation) {
+                        console.error(`\t${variantPathForEvaluation}`);
                     });
+
+                    // Log newline
+                    console.error('');
 
                     compiler.options.entry = missing;
                     this.missing = {};
@@ -402,20 +457,15 @@ export default class VariantBuilderPlugin {
     }
 
     apply(compiler) {
+        // TODO - handle module federation resolution in webpack 5
+
         // Resolves require-based assets (JS/JSX/CoffeeScript assets)
         compiler.hooks.afterResolvers.tap('VariantBuilderJSResolver', (compiler) => {
             compiler.resolverFactory.hooks.resolver.for('normal').tap('VariantBuilderJSResolverResolver', (resolver) => {
-                // TODO - this doesn't get invoked anymore?
-                // Remove hashtags
-                resolver.hooks.resolve.tap('VariantBuilderCleanPathResult', (request) => {
-                    request.path = request.path.replace(VARIANTS_URI_DELIMITER, '');
-                });
-
                 resolver.hooks.result.tap('VariantBuilderJSResolverResolverResult', this.resolverResultJSHookFactory(compiler));
             });
         });
 
-        // TODO - validate this works still
         // Resolves CSS/SASS/LESS assets
         compiler.hooks.compilation.tap('VariantBuilderStylesResolver', (compilation) => {
             compilation.hooks.succeedModule.tap('VariantBuilderStylesResolverSucceedModule', this.compilationSucceedModuleHookFactory());

@@ -1,4 +1,9 @@
+import path from 'path';
 import { mergeObj } from './utils.js';
+import {
+    VARIANTS_URI_DELIMITER,
+    VARIANTS_URI_PART_PREFIX
+} from './constants.js';
 
 export class MatchSet {
     constructor(resolvedArray, variantSet, sourceModule) {
@@ -27,8 +32,20 @@ export class MatchSet {
     }
 }
 
-export function hasVariantsInURI(variantsURI) {
-    return (!!variantsURI && variantsURI.indexOf('=') >= 0);
+export function buildVariantRegexForFilename(filenamePath) {
+    const extension = path.extname(filenamePath);
+    const fileName = path.basename(filenamePath, extension);
+    const fileNameLen = fileName.length;
+
+    const variantRegexStr = "^" + fileName + "(\\.[\\w\\=\\:]+)*" + (extension ? "\\" + extension + "$" : "$");
+    const variantRegex = new RegExp(variantRegexStr, 'g');
+
+    return {
+        extension: extension,
+        fileName: fileName,
+        fileNameLen: fileNameLen,
+        variantRegex: variantRegex
+    };
 }
 
 export function buildVariantSet(variantsURI) {
@@ -77,11 +94,11 @@ export function reduceVariantSet(variantSet, reducing) {
     return reduced;
 }
 
-export function objMin(obj, variantsPriority) {
+export function variantsPriorityMinIdx(varaintSet, variantsPriority) {
     let minVal = Infinity;
     let minIdx = null;
 
-    for (let key in obj) {
+    for (let key in varaintSet) {
         variantsPriority.forEach(function(variantPriority) {
             if (key.match(variantPriority.variantMatcher)) {
                 const { priority } = variantPriority;
@@ -96,18 +113,45 @@ export function objMin(obj, variantsPriority) {
     return minIdx;
 }
 
+export function serializeVariantSetToURI(variantSet, delimiter = '.') {
+    return Object.keys(variantSet).map((variantKey) => {
+        return variantKey + '=' + variantSet[variantKey];
+    }).join(delimiter);
+}
+
 export function buildVaraintsPriority(priorityArray) {
-    return priorityArray.map(function(variantMatcher, idx) {
+    return priorityArray.filter(function(variantMatcher) {
+        if (typeof variantMatcher !== 'string') {
+            console.error(`Invalid type passed in \`priority\`: ${JSON.stringify(variantMatcher)} - ignoring from \`priority\` array`);
+            return false;
+        }
+
+        return true;
+    }).map(function(variantMatcher, idx) {
         return {
-            variantMatcher: (variantMatcher instanceof RegExp) ? variantMatcher : new RegExp(`^${variantMatcher}$`),
+            variantMatcher: new RegExp(`^${variantMatcher}$`),
             priority: idx,
         };
     });
 }
 
+export function reduceVariantSetByPriority(variantSet, variantsPriority) {
+    const reduced = mergeObj({}, variantSet);
+
+    for (let key in reduced) {
+        variantsPriority.forEach(function(variantPriority) {
+            if (key.match(variantPriority.variantMatcher)) {
+                delete reduced[key];
+            }
+        });
+    }
+
+    return reduced;
+}
+
 export function prioritizeVariantSet(first, second, variantsPriority) {
-    let firstMinKey = objMin(first, variantsPriority);
-    let secondMinKey = objMin(second, variantsPriority);
+    let firstMinKey = variantsPriorityMinIdx(first, variantsPriority);
+    let secondMinKey = variantsPriorityMinIdx(second, variantsPriority);
 
     if (firstMinKey !== secondMinKey) {
         firstMinKey = (firstMinKey === null) ? '\xFF' : firstMinKey;
@@ -127,6 +171,47 @@ export function prioritizeVariantSet(first, second, variantsPriority) {
     delete second[secondMinKey];
 
     return prioritizeVariantSet(first, second, variantsPriority);
+}
+
+export function extractQueryFromURI(filenamePath) {
+    const requestQueryIdx = filenamePath.lastIndexOf(VARIANTS_URI_DELIMITER);
+    if (requestQueryIdx < 0) {
+        return undefined
+    }
+
+    let uriQuery = filenamePath.substring(requestQueryIdx);
+    const requestHashIdx = uriQuery.indexOf('#');
+    if (requestHashIdx >= 0) {
+        uriQuery = uriQuery.substring(0, requestHashIdx);
+    }
+
+    return uriQuery;
+}
+
+// Assumes query is prefixed with '?'
+export function extractWebpackVariantsFromQuery(query) {
+    if ((typeof query !== 'string') || (query.length <= 1)) {
+        return undefined;
+    }
+
+    const variantSet = buildVariantSet(query.substring(1));
+    for (let key in variantSet) {
+        if (!key.startsWith(VARIANTS_URI_PART_PREFIX)) {
+            delete variantSet[key];
+        }
+    }
+
+    return variantSet;
+}
+
+const VARIANTS_URI_PART_PREFIX_LEN = VARIANTS_URI_PART_PREFIX.length;
+export function extractRawVariantsFromWebpackVariants(variantSet) {
+    const newVariantSet = {};
+    for (let key in variantSet) {
+        newVariantSet[key.substring(VARIANTS_URI_PART_PREFIX_LEN)] = variantSet[key];
+    }
+
+    return newVariantSet;
 }
 
 /**

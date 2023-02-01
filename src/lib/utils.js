@@ -37,7 +37,7 @@ export function firstIndexOfPrefix(array, prefix, lower, upper) {
     let resolved = -1;
     while (lower != upper) {
         const pivot = Math.floor((upper + lower) / 2);
-        const value = array[pivot].substr(0, prefixLen);
+        const value = array[pivot].substring(0, prefixLen);
 
         if (prefix < value) {
             upper = pivot;
@@ -48,7 +48,7 @@ export function firstIndexOfPrefix(array, prefix, lower, upper) {
         }
     }
 
-    const value = array[upper].substr(0, prefixLen);
+    const value = array[upper].substring(0, prefixLen);
     return (prefix === value) ? upper : resolved;
 }
 
@@ -63,7 +63,7 @@ export function lastIndexOfPrefix(array, prefix, lower, upper) {
     let resolved = -1;
     while (lower != upper) {
         const pivot = Math.floor((upper + lower) / 2);
-        const value = array[pivot].substr(0, prefixLen);
+        const value = array[pivot].substring(0, prefixLen);
 
         if (prefix < value) {
             upper = pivot;
@@ -75,7 +75,7 @@ export function lastIndexOfPrefix(array, prefix, lower, upper) {
         }
     }
 
-    const value = array[upper].substr(0, prefixLen);
+    const value = array[upper].substring(0, prefixLen);
     return (prefix === value) ? upper : resolved;
 }
 

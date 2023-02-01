@@ -6,6 +6,12 @@ else
     SED_EXTENDED_CMD='sed -r'
 fi
 
+if [[ ! -z "$DEBUG" ]]; then
+    WEBPACK_CMD="node --inspect-brk ../node_modules/.bin/webpack"
+else
+    WEBPACK_CMD="webpack"
+fi
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -99,7 +105,7 @@ EXPECTATIONS_PATH="expectations"
 echo -e "${RED}${BOLD}webpack-variants Test Suite${FORMAT_RESET}"
 
 rm -Rf dist/*
-webpack build --config ./webpack.config.discover.js
+$WEBPACK_CMD build --config ./webpack.config.discover.mjs
 
 echo -e "${BLUE}${BOLD}Running assertions on webpack outputs for VariantBuilderPlugin${FORMAT_RESET}"
 
@@ -107,10 +113,11 @@ evaluateExpectations $ACTUAL_PATH $EXPECTATIONS_PATH webpack.variants.json
 
 echo -e "${BLUE}${BOLD}Ran assertions for VariantBuilderPlugin${FORMAT_RESET}"
 
-webpack build --config ./webpack.config.build.js
+$WEBPACK_CMD build --config ./webpack.config.build.mjs
 
 echo -e "${BLUE}${BOLD}Running assertions on webpack outputs for VariantResolverPlugin${FORMAT_RESET}"
 
 executeAndAssetWebpackBundles $ACTUAL_PATH $RESULTS_PATH $EXPECTATIONS_PATH "main.*.js"
+executeAndAssetWebpackBundles $ACTUAL_PATH $RESULTS_PATH $EXPECTATIONS_PATH "dynamic.*.js"
 
 echo -e "${BLUE}${BOLD}Ran assertions for VariantResolverPlugin${FORMAT_RESET}"
