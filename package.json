@@ -1,11 +1,11 @@
 {
-  "name": "@amzn/webpack-variants",
+  "name": "webpack-variants-plugin",
   "version": "0.1.0",
   "description": "Package for building asset variants using webpack",
-  "author": "Todd Wildey <twwildey@amazon.com>",
-  "license": "UNLICENSED",
-  "repository": "ssh://git.amazon.com/pkg/NodeJS-webpack-variants",
-  "homepage": "https://code.amazon.com/packages/NodeJS-webpack-variants",
+  "author": "Todd Wildey <toddwildey@gmail.com>",
+  "license": "Apache-2.0",
+  "repository": "ssh://git.amazon.com/pkg/webpack-variants-plugin",
+  "homepage": "https://github.com/toddwildey/webpack-variants-plugin",
   "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.mjs",
   "scripts": {

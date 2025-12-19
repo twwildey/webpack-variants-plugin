@@ -1,4 +1,4 @@
-# `@amzn/webpack-variants`
+# `webpack-variants-plugin`
 
 This package provides the `VariantBuilderPlugin` and `VariantResolverPlugin` plugins, which can be used to find and build variants for `webpack` bundles and chunks.
 
@@ -35,9 +35,9 @@ Page.device_type=tablet.js
 
 Here, the unvaried `Page.js` corresponds to the mobile view for the page, in alignment with mobile-first development principals.
 
-### Demonstration of `webpack-variants` to build entrypoint variants for `webpack`
+### Demonstration of `webpack-variants-plugin` to build entrypoint variants for `webpack`
 
-The `webpack-variants` plugin enables developers to create variants of their `webpack` bundles.  Using a specified set of variants/dimensions, `VariantBuilderPlugin` builds the closure of all variants found within a bundle produced by `webpack`, according to the variants of individual files included in that bundle.
+The `webpack-variants-plugin` enables developers to create variants of their `webpack` bundles.  Using a specified set of variants/dimensions, `VariantBuilderPlugin` builds the closure of all variants found within a bundle produced by `webpack`, according to the variants of individual files included in that bundle.
 
 To illustrate this, say a `webpack`-based package has the following `entry` defined in its `webpack.config.js`:
 
@@ -173,20 +173,20 @@ Each bundle includes the requested variant(s) of individual files/modules, when 
 
 ### Requirements
 
-Projects using `webpack-variants` **cannot** use the `webpackChunkName` hint for dynamic imports in their codebase for `webpack` projects.  Explicitly setting the `webpackChunkName` for dynamic imports will cause `webpack` to merge chunks that *should* be separated for different variants.  **Do not use  `webpackChunkName` hints in `webpack` projects that use the `webpack-variants` plugin.**
+Projects using `webpack-variants-plugin` **cannot** use the `webpackChunkName` hint for dynamic imports in their codebase for `webpack` projects.  Explicitly setting the `webpackChunkName` for dynamic imports will cause `webpack` to merge chunks that *should* be separated for different variants.  **Do not use  `webpackChunkName` hints in `webpack` projects that use the `webpack-variants-plugin`.**
 
-Additionally, `webpack-variants` does not work with transitive style modules loaded with `css-loader` at this time.  `webpack-variants` **can** resolve varied CSS modules that are imported directly from JavaScript modules.  However, `css-loader` does not use the `NormalModuleFactory` nor `enhanced-resolve` to resolve `@import` statements within CSS/styles files, which are used to resolve variants for modules in `webpack-variants`.
+Additionally, `webpack-variants-plugin` does not work with transitive style modules loaded with `css-loader` at this time.  `webpack-variants-plugin` **can** resolve varied CSS modules that are imported directly from JavaScript modules.  However, `css-loader` does not use the `NormalModuleFactory` nor `enhanced-resolve` to resolve `@import` statements within CSS/styles files, which are used to resolve variants for modules in `webpack-variants-plugin`.
 
-Support for variants of transitive CSS module dependencies may be added in the future.  `css-loader` uses PostCSS under the hood, which handles resolving modules from `@import` statements in CSS modules.  An existing PostCSS plugin [called `postcss-import-plugin`](https://github.com/nuxt-contrib/postcss-import-resolver) exists, which supports importing modules using `enhanced-resolve`.  Using `postcss-import-plugin`, `webpack-variants` could be extended to support variants of CSS modules in the future.
+Support for variants of transitive CSS module dependencies may be added in the future.  `css-loader` uses PostCSS under the hood, which handles resolving modules from `@import` statements in CSS modules.  An existing PostCSS plugin [called `postcss-import-plugin`](https://github.com/nuxt-contrib/postcss-import-resolver) exists, which supports importing modules using `enhanced-resolve`.  Using `postcss-import-plugin`, `webpack-variants-plugin` could be extended to support variants of CSS modules in the future.
 
 ### Building for production
 
-Projects using `webpack-variants` need to build bundles using `webpack` twice.  Typically, projects can achieve this by invoking two different NPM scripts defined in their `package.json`, though projects can use any mechanism of their choosing to invoke `webpack` twice.
+Projects using `webpack-variants-plugin` need to build bundles using `webpack` twice.  Typically, projects can achieve this by invoking two different NPM scripts defined in their `package.json`, though projects can use any mechanism of their choosing to invoke `webpack` twice.
 
 The first build needs to discover all variants used within the `webpack` bundles and build all combinations of the variants used by these bundles.  The first build needs to include `VariantBuilderPlugin` as a plugin in `webpack.config.js`:
 
 ```js
-import { VariantBuilderPlugin } from '@amzn/webpack-variants';
+import { VariantBuilderPlugin } from 'webpack-variants-plugin';
 
 export default {
     entry: {
@@ -209,7 +209,7 @@ export default {
 The second build bundles all variants of the bundles specified in the `entry` option of the `webpack.config.js`.  `VariantResolverPlugin` selects the appropriate variant for each dependency based on the target variants for the bundle.  The second build must include the `VariantResolverPlugin` as a plugin in `webpack.config.js`:
 
 ```js
-import { VariantResolverPlugin } from '@amzn/webpack-variants';
+import { VariantResolverPlugin } from 'webpack-variants-plugin';
 
 export default {
     entry: {
@@ -236,7 +236,7 @@ Rebuild speed is critical when running `webpack-dev-server`.  Projects can disab
 Developers can specify variants of their bundles by appending URI queries with query parameters representing the desired variants in the file paths of the `entry` option in their `webpack.config.js`:
 
 ```js
-import { VariantResolverPlugin } from '@amzn/webpack-variants';
+import { VariantResolverPlugin } from 'webpack-variants-plugin';
 
 export default {
     entry: {
